@@ -1,0 +1,242 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>City MPG Visualization</title>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    #visualization {
+      width: 80%;
+      margin: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 30px;
+    }
+    .chart-container {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      margin-bottom: 25px;
+    }
+    .chart {
+      width: 50%;
+    }
+    .axis text {
+      font-size: 10px;
+    }
+    .tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: #f1f1f1;
+      padding: 8px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    }
+    .annotation {
+      margin-top: 15px;
+      font-size: 16px;
+      text-align: center;
+      width: 85%;
+      line-height: 1.5;
+      color: #333;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 25px;
+      color: #0056b3;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    .button {
+      margin-top: 25px;
+      padding: 12px 24px;
+      font-size: 18px;
+      cursor: pointer;
+      border: none;
+      background-color: #28a745;
+      color: #ffffff;
+      border-radius: 6px;
+      transition: background-color 0.3s ease;
+    }
+    .button:hover {
+      background-color: #218838;
+    }
+    .button-container {
+      display: flex;
+      justify-content: space-around;
+      width: 100%;
+      margin-top: 20px;
+    }
+    .filter-container {
+      margin-bottom: 25px;
+      font-size: 16px;
+    }
+    .filter-container label {
+      margin-right: 12px;
+      font-weight: 500;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div id="visualization">
+    <div class="title">City MPG Comparison of Motor Vehicles</div>
+    <div class="filter-container">
+      <label for="filterGasDiesel">Show only Gasoline and Diesel vehicles:</label>
+      <input type="checkbox" id="filterGasDiesel">
+    </div>
+    <div class="chart-container">
+      <svg id="chart1" class="chart"></svg>
+      <svg id="chart2" class="chart"></svg>
+    </div>
+    <div class="chart-container">
+      <div id="annotation1" class="annotation">All vehicles are electric. Since they don't take gas, this measures their MPG equivalent, which is high because electric vehicles are built to be energy efficient.</div>
+      <div id="annotation2" class="annotation">Most of the vehicles are luxury brands that weren't built with gas efficiency in mind.</div>
+    </div>
+  </div>
+  <div id="tooltip" class="tooltip"></div>
+  <script>
+    const t = 30;
+    const r = 50;
+    const b = 80;
+    const l = 70;
+    const width = 500 - l - r;
+    const height = 400 - t - b;
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    d3.csv("https://flunky.github.io/cars2017.csv").then(function(data) {
+    data.forEach(function(d) {
+      d.AverageCityMPG = +d.AverageCityMPG;
+      d.EngineCylinders = +d.EngineCylinders;
+    });
+  
+    updateCharts(data);
+    d3.select("#filterGasDiesel").on("change", function() {
+        updateCharts(data);
+    });
+  });
+
+    function updateCharts(data) {
+    var isGasDieselOnly = d3.select("#filterGasDiesel").property("checked");
+  
+    var filteredData = isGasDieselOnly 
+      ? data.filter(function(d) {
+        return d.Fuel === "Gasoline" || d.Fuel === "Diesel";
+      })
+    : data;
+
+      d3.select("#chart1").select("g").remove();
+      d3.select("#chart2").select("g").remove();
+
+      createBarChart(filteredData, "AverageCityMPG", false, "Top 5 City MPG", d3.select("#chart1"));
+      createBarChart(filteredData, "AverageCityMPG", true, "Bottom 5 City MPG", d3.select("#chart2"));
+    }
+
+    function createBarChart(data, attribute, ascending, title, svgSelection) {
+      data.sort(function(a, b) {
+            if (ascending) {
+                return a[attribute] - b[attribute];
+            } else {
+                return b[attribute] - a[attribute];
+            }
+      });
+      var filteredData = data.slice(0, 5);
+
+      const x = d3.scaleBand()
+        .domain(filteredData.map(function(d) { return d.Make; }))
+        .range([0, width])
+        .padding(0.1);
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(filteredData, function(d) { return d[attribute]; })])
+        .range([height, 0]);
+
+      const svg = svgSelection
+        .attr("width", width + l + r)
+        .attr("height", height + t + b)
+        .append("g")
+        .attr("transform", `translate(${l},${t})`);
+
+      svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x))
+        .selectAll("text")
+        .attr("transform", "rotate(-40)")
+        .style("text-anchor", "end");
+
+      svg.append("g")
+        .attr("class", "y axis")
+        .call(d3.axisLeft(y));
+
+      const bars = svg.selectAll(".bar")
+        .data(filteredData);
+
+      bars.transition()
+        .duration(750)
+        .attr("x", function(d) { return x(d.Make); })
+        .attr("width", x.bandwidth())
+        .attr("y", function(d) { return y(d[attribute]); })
+        .attr("height", function(d) { return height - y(d[attribute]); })
+
+      bars.enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", function(d) { return x(d.Make); })
+        .attr("width", x.bandwidth())
+        .attr("y", height)
+        .attr("height", 0)
+        .attr("fill", function(d, i) { return color(i); })
+        .on("mouseover", function(event, d) {
+          var tooltip = d3.select("#tooltip");
+          tooltip.style("left", event.pageX + "px")
+         .style("top", (event.pageY - 40) + "px")
+         .style("opacity", 1)
+         .html("<strong>Make:</strong> " + d.Make + "<br>" +
+               "<strong>Fuel:</strong> " + d.Fuel + "<br>" +
+               "<strong>Engine Cylinders:</strong> " + d.EngineCylinders + "<br>" +
+               "<strong>" + attribute + ":</strong> " + d[attribute]);
+        })
+        .on("mouseout", function() {
+            d3.select("#tooltip").style("opacity", 0);
+        })
+        .transition()
+        .duration(750)
+        .attr("y", function(d) {
+            return y(d[attribute]);
+        })
+        .attr("height", function(d) {
+        return height - y(d[attribute]);
+        });
+
+      bars.exit().transition()
+        .duration(750)
+        .attr("height", 0)
+        .attr("y", height)
+        .remove();
+
+      svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", 0 - (t / 2))
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .text(title);
+    }
+  </script>
+  <div class="button-container">
+    <a href="index.html"><button class="button">Back to Introduction</button></a>
+    <a href="highway.html"><button class="button">Highway MPG Comparison</button></a>
+    <a href="ratio.html"><button class="button">City/Highway MPG Ratio</button></a>
+  </div>
+</body>
+</html>
